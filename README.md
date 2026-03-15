@@ -1,31 +1,33 @@
 # score-cache-slides
 
-Explainer slide deck for [score-cache](https://github.com/nick-hildebrant-etas/score-cache) — a self-hosted, hermetic dependency mirror and build cache for the eclipse-score / S-CORE project family.
+Reveal.js slide deck explaining [score-cache](https://github.com/nick-hildebrant-etas/score-cache) — a hermetic build cache for the S-CORE project.
 
-**[View slides →](https://nick-hildebrant-etas.github.io/score-cache-slides/)**
+## Live slides
 
-## What's covered
+Once GitHub Pages is enabled for this repository, the deck is published at:
 
-- Why score-cache exists (the problem it solves)
-- Architecture and services (bazel-remote, devpi, cargo-mirror, artifact mirror)
-- Why a public cache container is needed
-- Replacing with Artifactory / Nexus in corporate environments
-- How it is built with Dagger
-- Why Dagger was chosen
-- Dagger benefits for score/reference-integration and modules
-- Decisions taken and open decisions
-
-## Development
-
-```bash
-npm install
-npm run preview   # live preview at http://localhost:8080
-npm run build     # build static HTML to dist/index.html
+```
+https://nick-hildebrant-etas.github.io/score-cache-slides/
 ```
 
-Slides are written in [Marp](https://marp.app) Markdown (`slides.md`).
-SVG diagrams live in `images/`.
+## Topics covered
+
+- Why S-CORE needs a hermetic dependency cache
+- What is inside score-cache (bazel-remote, devpi, cargo-mirror, artifact mirror)
+- Why a public cache container is the right default
+- How to replace it with Artifactory / Nexus in a corporate environment
+- How score-cache is built with Dagger and why Dagger was chosen
+- How Dagger helps with score/reference-integration and reusable modules
+- Open decisions and decisions that are already settled
+
+## Viewing locally
+
+Open `index.html` in any modern browser — no build step required.  All
+Reveal.js assets are loaded from the jsDelivr CDN.
 
 ## Deployment
 
-Slides are automatically built and deployed to GitHub Pages on every push to `main`.
+Pushing to `main` triggers the GitHub Actions workflow in
+`.github/workflows/pages.yml`, which publishes the `index.html` directly to
+GitHub Pages.  Enable Pages in the repository settings
+(**Settings → Pages → Source: GitHub Actions**) to activate the deployment.

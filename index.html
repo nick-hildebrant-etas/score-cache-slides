@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>score-cache – A Hermetic Build Cache for S-CORE</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/night.css" id="theme">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+  <style>
+    :root {
+      --r-heading-color: #4fc3f7;
+      --r-link-color: #4fc3f7;
+      --r-selection-background-color: #4fc3f7;
+    }
+
+    .reveal .slides section {
+      text-align: left;
+    }
+
+    .reveal h1, .reveal h2, .reveal h3 {
+      text-align: center;
+    }
+
+    .reveal h1 { font-size: 1.8em; }
+    .reveal h2 { font-size: 1.4em; }
+
+    .tag {
+      display: inline-block;
+      background: #1565c0;
+      color: #e3f2fd;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 0.7em;
+      font-family: monospace;
+      vertical-align: middle;
+    }
+
+    .tag.open   { background: #e65100; }
+    .tag.done   { background: #2e7d32; }
+    .tag.dagger { background: #4a148c; }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5em;
+    }
+
+    .box {
+      background: rgba(255,255,255,0.07);
+      border-left: 4px solid #4fc3f7;
+      padding: 0.6em 1em;
+      border-radius: 4px;
+      font-size: 0.82em;
+    }
+
+    .box.green  { border-left-color: #66bb6a; }
+    .box.orange { border-left-color: #ffa726; }
+    .box.purple { border-left-color: #ba68c8; }
+    .box.red    { border-left-color: #ef5350; }
+
+    .reveal pre code { max-height: 400px; font-size: 0.75em; }
+
+    table.endpoints {
+      width: 100%;
+      font-size: 0.72em;
+      border-collapse: collapse;
+    }
+    table.endpoints th {
+      background: rgba(79,195,247,0.2);
+      color: #4fc3f7;
+      padding: 6px 8px;
+      text-align: left;
+    }
+    table.endpoints td {
+      padding: 5px 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    table.endpoints tr:last-child td { border-bottom: none; }
+
+    .center { text-align: center !important; }
+    .small  { font-size: 0.8em; }
+    .mono   { font-family: monospace; }
+
+    .fragment.highlight-current-blue.current-fragment { color: #4fc3f7; }
+
+    .decision-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.8em;
+      font-size: 0.78em;
+    }
+
+    .pipeline-step {
+      display: flex;
+      align-items: center;
+      gap: 0.6em;
+      margin: 0.4em 0;
+    }
+    .pipeline-step .num {
+      background: #4fc3f7;
+      color: #111;
+      border-radius: 50%;
+      width: 1.6em;
+      height: 1.6em;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ─────────────────────────────────────────────── TITLE ──── -->
+<section>
+  <h1>score-cache</h1>
+  <h3 class="center" style="color:#90caf9">A Hermetic Build Cache for S-CORE</h3>
+  <br>
+  <p class="center small" style="color:#aaa">
+    Why it exists · How it works · Why Dagger · Where it goes next
+  </p>
+  <p class="center" style="margin-top:2em">
+    <a href="https://github.com/nick-hildebrant-etas/score-cache" style="font-size:0.7em">
+      github.com/nick-hildebrant-etas/score-cache
+    </a>
+  </p>
+</section>
+
+<!-- ─────────────────────────────────────────── THE PROBLEM ── -->
+<section>
+  <section>
+    <h2>The Problem</h2>
+    <p class="small" style="color:#aaa;text-align:center">Why can't we just <code>bazel build</code>?</p>
+    <br>
+    <div class="two-col">
+      <div class="box red">
+        <strong>Dependency sprawl</strong><br>
+        S-CORE pulls from Bazel module registry, PyPI, crates.io, GitHub release URLs — dozens of external hosts during a single <code>bazel fetch //…</code>.
+      </div>
+      <div class="box red">
+        <strong>Network restrictions</strong><br>
+        Corporate networks, air-gapped CI, and developer machines behind proxies all struggle with unconstrained egress.
+      </div>
+      <div class="box red">
+        <strong>Non-reproducibility</strong><br>
+        External hosts can change, go offline, or serve different content. A build that passes today may fail tomorrow.
+      </div>
+      <div class="box red">
+        <strong>Slow cold starts</strong><br>
+        Without a shared action cache, every CI runner re-compiles the same artifacts from scratch.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The Dependency Surface</h2>
+    <p class="small" style="text-align:center">One clean <code>bazel fetch //…</code> contacts…</p>
+    <br>
+    <table class="endpoints">
+      <tr><th>Tool</th><th>External host</th><th>Content</th></tr>
+      <tr><td>Bazel modules</td><td>registry.bazel.build, GitHub releases</td><td>Module archives, toolchain tarballs</td></tr>
+      <tr><td>pip / uv</td><td>pypi.org</td><td>Python wheels &amp; sdists</td></tr>
+      <tr><td>Cargo / rules_rust</td><td>crates.io, GitHub</td><td>Crate tarballs, sparse index</td></tr>
+      <tr><td>http_archive</td><td>GitHub, mirrors.kernel.org, …</td><td>GCC, Clang, sysroots</td></tr>
+    </table>
+    <br>
+    <p class="center small" style="color:#ef9a9a">Every one of these is a potential point of failure in CI or a corporate network.</p>
+  </section>
+</section>
+
+<!-- ──────────────────────────────────────── THE SOLUTION ──── -->
+<section>
+  <section>
+    <h2>The Solution: score-cache</h2>
+    <p class="center small" style="color:#aaa">One container. Four servers. Zero external traffic.</p>
+    <br>
+    <div class="box" style="font-size:0.85em">
+      <strong>score-cache</strong> is a self-hosted, hermetic dependency mirror and build cache assembled entirely from tools already native to the S-CORE toolchain — no commercial artifact repository required.
+    </div>
+    <br>
+    <ul class="small">
+      <li class="fragment">Single OCI image, tagged <code>score-cache:YYYYMMDD-&lt;graph-hash&gt;</code></li>
+      <li class="fragment">All four servers behind one hostname (<code>score-cache</code>)</li>
+      <li class="fragment">Each server speaks the <em>exact</em> protocol the build tool expects — no client shims</li>
+      <li class="fragment">Every dependency downloaded once, sha256-verified, stored immutably</li>
+      <li class="fragment">Published to GHCR; old tags never deleted → historical builds are reproducible forever</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>What's Inside the Container</h2>
+    <br>
+    <table class="endpoints">
+      <tr><th>Service</th><th>Port</th><th>Protocol</th><th>Content</th></tr>
+      <tr>
+        <td><strong>bazel-remote</strong></td>
+        <td class="mono">9092</td>
+        <td>Bazel HTTP remote cache API</td>
+        <td>Action cache + CAS blobs</td>
+      </tr>
+      <tr>
+        <td><strong>devpi</strong></td>
+        <td class="mono">3141</td>
+        <td>PyPI simple index (PEP 503)</td>
+        <td>Python wheels &amp; sdists</td>
+      </tr>
+      <tr>
+        <td><strong>cargo-mirror</strong> (nginx)</td>
+        <td class="mono">8081/cargo</td>
+        <td>Cargo sparse registry protocol</td>
+        <td>Crate tarballs + sparse index</td>
+      </tr>
+      <tr>
+        <td><strong>artifact mirror</strong> (nginx)</td>
+        <td class="mono">8081/artifacts</td>
+        <td>HTTP GET (content-addressed)</td>
+        <td>Toolchain tarballs, http_archive</td>
+      </tr>
+    </table>
+    <br>
+    <p class="center small" style="color:#aaa">All four managed by <strong>supervisord</strong> inside the container.</p>
+  </section>
+</section>
+
+<!-- ─────────────────────────────── WHY A PUBLIC CONTAINER ── -->
+<section>
+  <section>
+    <h2>Why a Public Cache Container?</h2>
+    <br>
+    <div class="two-col">
+      <div class="box green">
+        <strong>Open-source by default</strong><br>
+        S-CORE is developed in the open. Contributors need to get a working build without any internal infrastructure.
+      </div>
+      <div class="box green">
+        <strong>Zero-configuration onboarding</strong><br>
+        Pull the image, start it, add three lines to <code>.bazelrc</code>. No accounts, no licenses, no VPN required.
+      </div>
+      <div class="box green">
+        <strong>Reproducibility guarantee</strong><br>
+        A public immutable tag means <em>any</em> contributor can rebuild <em>any</em> historical version of the codebase.
+      </div>
+      <div class="box green">
+        <strong>Ecosystem composability</strong><br>
+        The same image works as a Dagger service, a Docker Compose dependency, or a Kubernetes sidecar — because it is just an OCI image.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Configuring Your Build Tools</h2>
+    <p class="center small" style="color:#aaa">Three snippets — one per ecosystem</p>
+    <div class="two-col" style="font-size:0.85em">
+      <div>
+        <p><strong>.bazelrc</strong></p>
+        <pre><code class="language-ini">build --remote_cache=http://score-cache:9092
+build --remote_timeout=60
+build --experimental_remote_cache_async</code></pre>
+        <p><strong>.cargo/config.toml</strong></p>
+        <pre><code class="language-toml">[source.crates-io]
+replace-with = "score-cache"
+
+[source.score-cache]
+registry = "sparse+http://score-cache:8081/cargo/index/"</code></pre>
+      </div>
+      <div>
+        <p><strong>pip.conf / pyproject.toml</strong></p>
+        <pre><code class="language-toml">[[tool.uv.index]]
+name    = "score-cache"
+url     = "http://score-cache:3141/root/pypi/+simple/"
+default = true</code></pre>
+        <p class="small" style="color:#aaa; margin-top: 1em">
+          In Docker Compose or a Dagger service network, the hostname <code>score-cache</code> resolves automatically. For local use set <code>SCORE_CACHE_HOST=localhost</code>.
+        </p>
+      </div>
+    </div>
+  </section>
+</section>
+
+<!-- ───────────────────────────────── CORPORATE REPLACEMENT ── -->
+<section>
+  <section>
+    <h2>In a Corporate Environment</h2>
+    <p class="center small" style="color:#aaa">score-cache and Artifactory are <em>interchangeable backends</em></p>
+    <br>
+    <div class="two-col">
+      <div class="box" style="border-left-color:#4fc3f7">
+        <strong>score-cache</strong> (open-source)<br>
+        <ul class="small" style="margin-top:0.4em">
+          <li>Self-hosted OCI image</li>
+          <li>bazel-remote / devpi / nginx</li>
+          <li>Versioned with your lock files</li>
+          <li>Zero cost, open license</li>
+        </ul>
+      </div>
+      <div class="box" style="border-left-color:#1e88e5">
+        <strong>Artifactory / Nexus</strong> (centralized)<br>
+        <ul class="small" style="margin-top:0.4em">
+          <li>Managed service or on-prem</li>
+          <li>Bazel Remote Cache repo</li>
+          <li>PyPI Proxy repo</li>
+          <li>Cargo / Generic repo</li>
+        </ul>
+      </div>
+    </div>
+    <br>
+    <div class="box green fragment">
+      <strong>The build tools are unchanged.</strong> Only the URL in the config switches. A corporate team can replace score-cache with Artifactory by editing three config snippets — no Bazel rules, no Python code, no Cargo source changes.
+    </div>
+  </section>
+
+  <section>
+    <h2>Endpoint Symmetry</h2>
+    <p class="center small" style="color:#aaa">Every endpoint has a direct Artifactory equivalent</p>
+    <br>
+    <table class="endpoints">
+      <tr>
+        <th>Build tool</th>
+        <th>score-cache URL</th>
+        <th>Artifactory equivalent</th>
+      </tr>
+      <tr>
+        <td>Bazel cache</td>
+        <td class="mono small">http://score-cache:9092</td>
+        <td class="mono small">https://artifactory/bazel</td>
+      </tr>
+      <tr>
+        <td>pip / uv</td>
+        <td class="mono small">http://score-cache:3141/root/pypi/+simple/</td>
+        <td class="mono small">https://artifactory/pypi/simple/</td>
+      </tr>
+      <tr>
+        <td>Cargo</td>
+        <td class="mono small">http://score-cache:8081/cargo/index/</td>
+        <td class="mono small">https://artifactory/cargo/</td>
+      </tr>
+      <tr>
+        <td>http_archive / toolchains</td>
+        <td class="mono small">http://score-cache:8081/artifacts/</td>
+        <td class="mono small">https://artifactory/generic/</td>
+      </tr>
+    </table>
+    <br>
+    <p class="center small fragment" style="color:#a5d6a7">
+      score-cache gives you the same hermetic guarantee <em>today</em>, with no procurement, no license negotiation, and no waiting for IT.
+    </p>
+  </section>
+</section>
+
+<!-- ──────────────────────────────────── BUILT WITH DAGGER ── -->
+<section>
+  <section>
+    <h2>Built with Dagger</h2>
+    <p class="center small" style="color:#aaa">The entire cache lifecycle is a Dagger pipeline</p>
+    <br>
+    <div style="font-size:0.82em">
+      <div class="pipeline-step fragment">
+        <span class="num">1</span>
+        <div class="box" style="flex:1"><strong>resolve-graph</strong> — runs <code>bazel fetch //…</code> inside a proxied Dagger container; extracts every URL + sha256 from lock files into <code>url-inventory.json</code></div>
+      </div>
+      <div class="pipeline-step fragment">
+        <span class="num">2</span>
+        <div class="box" style="flex:1"><strong>seed-cache</strong> — downloads &amp; verifies every dependency; populates bazel-remote CAS, devpi, cargo-mirror, and nginx artifact store into image layers</div>
+      </div>
+      <div class="pipeline-step fragment">
+        <span class="num">3</span>
+        <div class="box" style="flex:1"><strong>verify-hermetic</strong> — runs full build &amp; test in a network-isolated Dagger container; fails if <em>any</em> external request escapes to the internet</div>
+      </div>
+      <div class="pipeline-step fragment">
+        <span class="num">4</span>
+        <div class="box" style="flex:1"><strong>publish-cache</strong> — pushes tagged image to GHCR; mirrors to long-retention archive registry</div>
+      </div>
+      <div class="pipeline-step fragment">
+        <span class="num">5</span>
+        <div class="box" style="flex:1"><strong>record-manifest</strong> — appends immutable digest + lock fingerprints to <code>versions.json</code> in source control</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Dagger Pipeline Code</h2>
+    <p class="center small" style="color:#aaa">Pipelines are typed Python functions — not shell scripts</p>
+    <pre><code class="language-python">@function
+async def score_cache(self) -> dagger.Container:
+    """Build, verify, and publish the score-cache image."""
+    inventory  = await self.resolve_graph()        # 1
+    seeded     = await self.seed_cache(inventory)  # 2
+    _verified  = await self.verify_hermetic(seeded)# 3
+    digest     = await self.publish_cache(seeded)  # 4
+    await self.record_manifest(digest)             # 5
+    return seeded</code></pre>
+    <br>
+    <ul class="small fragment">
+      <li>Each stage is a Dagger <code>Container</code> — fully reproducible, cache-aware</li>
+      <li>The <code>verify-hermetic</code> stage uses Dagger's service-binding API to allow only <code>score-cache</code> egress</li>
+      <li><code>dagger call score-cache</code> runs the full pipeline; <code>dagger call score-cache-plan</code> dry-runs it</li>
+    </ul>
+  </section>
+</section>
+
+<!-- ─────────────────────────────────────────── WHY DAGGER ── -->
+<section>
+  <section>
+    <h2>Why Dagger?</h2>
+    <br>
+    <div class="two-col">
+      <div class="box purple fragment">
+        <strong>Portable pipelines</strong><br>
+        The same Dagger function runs identically on a developer laptop, in GitHub Actions, and in any other CI provider — no YAML rewrites.
+      </div>
+      <div class="box purple fragment">
+        <strong>Native service binding</strong><br>
+        Dagger can start <code>score-cache</code> as a service and bind the build container to it with one call, with all other egress blocked — no iptables, no network namespaces to manage.
+      </div>
+      <div class="box purple fragment">
+        <strong>Typed, testable DAGs</strong><br>
+        Pipelines are Python <code>@function</code> methods. Pure logic is unit-tested with <code>pytest</code>. Dagger stages are integration-tested with <code>dagger call</code>.
+      </div>
+      <div class="box purple fragment">
+        <strong>Container-native caching</strong><br>
+        Dagger caches every layer automatically. Adding a new Python package re-runs only the devpi seed stage, not the entire pipeline.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Dagger vs. Alternatives</h2>
+    <br>
+    <table class="endpoints" style="font-size:0.75em">
+      <tr>
+        <th>Concern</th>
+        <th>Shell scripts</th>
+        <th>GitHub Actions YAML</th>
+        <th>Dagger</th>
+      </tr>
+      <tr>
+        <td>Runs locally</td>
+        <td>✅</td>
+        <td>❌ (act is partial)</td>
+        <td>✅</td>
+      </tr>
+      <tr>
+        <td>Typed, unit-testable</td>
+        <td>❌</td>
+        <td>❌</td>
+        <td>✅ (Python + pytest)</td>
+      </tr>
+      <tr>
+        <td>Container-layer caching</td>
+        <td>❌ manual</td>
+        <td>⚠️ cache action</td>
+        <td>✅ automatic</td>
+      </tr>
+      <tr>
+        <td>Service binding / network isolation</td>
+        <td>❌ manual</td>
+        <td>❌ manual</td>
+        <td>✅ first-class API</td>
+      </tr>
+      <tr>
+        <td>Multi-repo orchestration</td>
+        <td>⚠️ complex</td>
+        <td>⚠️ workflow_call</td>
+        <td>✅ polyrepo-first</td>
+      </tr>
+      <tr>
+        <td>CI provider portability</td>
+        <td>⚠️ depends</td>
+        <td>❌ GHA-specific</td>
+        <td>✅</td>
+      </tr>
+    </table>
+  </section>
+</section>
+
+<!-- ─────────────────────────── DAGGER: MODULES & INTEGRATION ─ -->
+<section>
+  <section>
+    <h2>Dagger in score/reference-integration</h2>
+    <p class="center small" style="color:#aaa">How Dagger helps across the S-CORE ecosystem</p>
+    <br>
+    <div class="box fragment" style="font-size:0.85em">
+      <strong>Polyrepo orchestration</strong> — <code>config/repos.yaml</code> is a catalog of all S-CORE repos. A single <code>dagger call integration</code> runs build + test across all of them, selecting repos by tag, profile, or name.
+    </div>
+    <br>
+    <div class="box green fragment" style="font-size:0.85em">
+      <strong>score-cache as a Dagger service</strong> — Any pipeline stage that needs hermetic resolution can bind <code>score-cache</code> as a Dagger service. The stage gets a guaranteed-available cache with zero external traffic — no Docker Compose, no Kubernetes, no side-channel setup.
+    </div>
+    <br>
+    <div class="box purple fragment" style="font-size:0.85em">
+      <strong>reference-integration gate</strong> — The <code>verify-hermetic</code> stage proves that the full S-CORE build tree (fetch + build + test) passes with <em>only</em> score-cache reachable. This becomes the reference-integration acceptance criterion.
+    </div>
+  </section>
+
+  <section>
+    <h2>Dagger Modules</h2>
+    <p class="center small" style="color:#aaa">Reusable pipeline building blocks</p>
+    <br>
+    <ul class="small">
+      <li class="fragment">
+        <strong>score-cache as a shared Dagger module</strong> — any repo in the S-CORE ecosystem can consume <code>score-cache</code> as a Dagger module dependency and get a ready-to-use cache service with one import.
+      </li>
+      <li class="fragment">
+        <strong>Composable stages</strong> — <code>resolve-graph</code>, <code>seed-cache</code>, and <code>verify-hermetic</code> are individually callable. A downstream module can call only the stages it needs.
+      </li>
+      <li class="fragment">
+        <strong>Version-locked services</strong> — modules pin a specific <code>score-cache</code> image tag. A Dagger module update is the only way to change which cache image a pipeline uses — full auditability.
+      </li>
+      <li class="fragment">
+        <strong>Local and CI parity</strong> — developers run <code>dagger call score-cache-plan</code> locally and get the exact same execution graph CI will run — including the same cache image tag.
+      </li>
+    </ul>
+  </section>
+</section>
+
+<!-- ─────────────────────────────────────────── DECISIONS ──── -->
+<section>
+  <section>
+    <h2>Decisions Taken</h2>
+    <p class="center small" style="color:#aaa">Choices that are settled and in effect</p>
+    <br>
+    <div class="decision-grid">
+      <div class="box green fragment">
+        <span class="tag done">done</span>
+        <strong>Mirror, not vendor</strong><br>
+        Rust crates are served from an internal sparse registry mirror, not checked in as source. Mirrors are immutable per image tag.
+      </div>
+      <div class="box green fragment">
+        <span class="tag done">done</span>
+        <strong>Date + graph-hash tag format</strong><br>
+        <code>YYYYMMDD-&lt;graph-hash&gt;</code> makes image provenance and freshness immediately legible. Hash changes only when lock files change.
+      </div>
+      <div class="box green fragment">
+        <span class="tag done">done</span>
+        <strong>versions.json is append-only</strong><br>
+        Once an entry is written it is never modified. Digest + fingerprint records are immutable facts in source control.
+      </div>
+      <div class="box green fragment">
+        <span class="tag done">done</span>
+        <strong>supervisord manages all four servers</strong><br>
+        One container, one process supervisor. No sidecar containers, no Kubernetes pods required for local use.
+      </div>
+      <div class="box green fragment">
+        <span class="tag done">done</span>
+        <strong>Dagger Python SDK</strong><br>
+        Pipeline logic is typed Python <code>@function</code> methods, not YAML or shell. Pure helpers are unit-tested with pytest via <code>make test</code>.
+      </div>
+      <div class="box green fragment">
+        <span class="tag done">done</span>
+        <strong>sha256 required for every entry</strong><br>
+        Entries without a public sha256 are logged as warnings and skipped by the seeders. No unverified content enters the cache.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Open Decisions</h2>
+    <p class="center small" style="color:#aaa">Questions still being worked through</p>
+    <br>
+    <div class="decision-grid">
+      <div class="box orange fragment">
+        <span class="tag open">open</span>
+        <strong>OCI registry sidecar</strong><br>
+        Should score-cache include a local OCI distribution registry on port 5000 for base-image hermeticity? Adds complexity; needed only if container base images must be fetched offline.
+      </div>
+      <div class="box orange fragment">
+        <span class="tag open">open</span>
+        <strong>Read-only vs. read-write cache in CI</strong><br>
+        bazel-remote defaults to read-write. Should CI push action results, or should the seeded image be the only write path? Trade-off between cache warmth and reproducibility.
+      </div>
+      <div class="box orange fragment">
+        <span class="tag open">open</span>
+        <strong>Long-retention archive registry</strong><br>
+        GHCR with no-delete policy, or a separate org-controlled registry? Policy and cost trade-offs under discussion.
+      </div>
+      <div class="box orange fragment">
+        <span class="tag open">open</span>
+        <strong>Baselibs integration timing</strong><br>
+        When to land the <code>.bazelrc</code> lines in <code>eclipse-score/baselibs</code> (Phase 5). Blocked on hermetic verification passing for the full baselibs build graph.
+      </div>
+      <div class="box orange fragment">
+        <span class="tag open">open</span>
+        <strong>Vendoring as hardening path</strong><br>
+        Checking crate sources into the repo is an option for maximum air-gap hardening. Currently out of scope but not ruled out.
+      </div>
+      <div class="box orange fragment">
+        <span class="tag open">open</span>
+        <strong>Dagger module publication</strong><br>
+        Publishing score-cache as a reusable Dagger module to the Dagger module registry — enables any S-CORE downstream to consume it as a typed dependency.
+      </div>
+    </div>
+  </section>
+</section>
+
+<!-- ─────────────────────────────────────────── VERSIONING ── -->
+<section>
+  <h2>Versioning &amp; Reproducibility</h2>
+  <p class="center small" style="color:#aaa">Every build is a named, retrievable artifact</p>
+  <br>
+  <div class="two-col" style="font-size:0.82em">
+    <div>
+      <p><strong>versions.json entry</strong></p>
+      <pre><code class="language-json">{
+  "tag": "20260315-a3f9c1d2",
+  "date": "2026-03-15",
+  "graph_hash": "a3f9c1d2",
+  "bazel_version": "7.4.1",
+  "toolchain_versions": {
+    "gcc": "13.2.0",
+    "rust": "1.75.0"
+  },
+  "image_digests": {
+    "score-cache": "sha256:abc123..."
+  }
+}</code></pre>
+    </div>
+    <div>
+      <p><strong>Trigger policy</strong></p>
+      <ul class="small" style="margin-top:0">
+        <li>New image on any change to:<br>
+          <code>.bazelversion</code><br>
+          <code>MODULE.bazel.lock</code><br>
+          <code>uv.lock</code><br>
+          <code>Cargo.lock</code>
+        </li>
+        <li>Old tags <strong>never deleted</strong></li>
+        <li>Pull by digest for exact historical replay:</li>
+      </ul>
+      <pre><code class="language-bash">docker pull \
+  ghcr.io/eclipse-score/score-cache@sha256:abc123...</code></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ──────────────────────────────────────────────── ROADMAP ── -->
+<section>
+  <h2>Roadmap</h2>
+  <br>
+  <table class="endpoints" style="font-size:0.8em">
+    <tr>
+      <th>Phase</th>
+      <th>Goal</th>
+      <th>Status</th>
+    </tr>
+    <tr>
+      <td>0 — Design freeze</td>
+      <td>Architecture, tag format, manifest schema</td>
+      <td style="color:#a5d6a7">✅ Complete</td>
+    </tr>
+    <tr>
+      <td>1 — Dagger skeleton</td>
+      <td>Pipeline stage contracts defined in code</td>
+      <td style="color:#a5d6a7">✅ Complete</td>
+    </tr>
+    <tr>
+      <td>2 — Dependency discovery</td>
+      <td>Full URL inventory from baselibs graph</td>
+      <td style="color:#fff176">🔄 In progress</td>
+    </tr>
+    <tr>
+      <td>3 — Hermetic gate</td>
+      <td>verify-hermetic passes for full build + test</td>
+      <td style="color:#fff176">🔄 In progress</td>
+    </tr>
+    <tr>
+      <td>4 — Publish &amp; archive</td>
+      <td>GHCR push + long-retention mirror + versions.json</td>
+      <td style="color:#aaa">⬜ Pending phase 3</td>
+    </tr>
+    <tr>
+      <td>5 — Baselibs integration</td>
+      <td>Minimal .bazelrc lines in eclipse-score/baselibs</td>
+      <td style="color:#aaa">⬜ Pending phase 4</td>
+    </tr>
+    <tr>
+      <td>6 — Dagger module</td>
+      <td>score-cache published as reusable Dagger module</td>
+      <td style="color:#aaa">⬜ Open decision</td>
+    </tr>
+  </table>
+</section>
+
+<!-- ────────────────────────────────────────────── SUMMARY ── -->
+<section>
+  <h2>Summary</h2>
+  <br>
+  <ul>
+    <li class="fragment"><strong>score-cache</strong> solves S-CORE's dependency availability, reproducibility, and build speed problems with one OCI image.</li>
+    <li class="fragment">It is a <strong>drop-in replacement</strong> for Artifactory in open-source environments — same protocols, same client config, different URL.</li>
+    <li class="fragment"><strong>Dagger</strong> makes the pipeline portable, testable, and service-network-aware — hermetic verification is a first-class feature, not an afterthought.</li>
+    <li class="fragment">Every image is <strong>immutable, versioned, and archived</strong> — historical builds are reproducible indefinitely.</li>
+    <li class="fragment">Open decisions are tracked and bounded; the architecture is ready to grow into a <strong>shared Dagger module</strong> for the wider S-CORE ecosystem.</li>
+  </ul>
+  <br>
+  <p class="center fragment">
+    <a href="https://github.com/nick-hildebrant-etas/score-cache">github.com/nick-hildebrant-etas/score-cache</a>
+  </p>
+</section>
+
+</div><!-- .slides -->
+</div><!-- .reveal -->
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    slideNumber: 'c/t',
+    transition: 'slide',
+    transitionSpeed: 'fast',
+    controls: true,
+    progress: true,
+    center: false,
+    width: 1200,
+    height: 700,
+    margin: 0.04,
+    plugins: [ RevealHighlight, RevealNotes ]
+  });
+</script>
+</body>
+</html>
