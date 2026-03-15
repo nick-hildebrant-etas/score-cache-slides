@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" font-family="Segoe UI, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#1e88e5"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#43a047"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="520" fill="#f8f9fa" rx="8"/>
+
+  <!-- Title -->
+  <text x="450" y="30" text-anchor="middle" font-size="16" font-weight="bold" fill="#333">score-cache — Network Architecture</text>
+
+  <!-- score-devcontainer box -->
+  <rect x="20" y="50" width="200" height="400" fill="#fafafa" stroke="#90a4ae" stroke-width="1.5" rx="8"/>
+  <text x="120" y="72" text-anchor="middle" font-size="12" font-weight="bold" fill="#546e7a">score-devcontainer</text>
+
+  <!-- Build tools inside devcontainer -->
+  <rect x="35" y="85" width="170" height="42" fill="#e8eaf6" stroke="#7986cb" stroke-width="1" rx="5"/>
+  <text x="120" y="102" text-anchor="middle" font-size="11" font-weight="bold" fill="#3949ab">Bazel</text>
+  <text x="120" y="118" text-anchor="middle" font-size="10" fill="#3949ab">fetch · build · test</text>
+
+  <rect x="35" y="140" width="170" height="42" fill="#e8eaf6" stroke="#7986cb" stroke-width="1" rx="5"/>
+  <text x="120" y="157" text-anchor="middle" font-size="11" font-weight="bold" fill="#3949ab">Cargo / rules_rust</text>
+  <text x="120" y="173" text-anchor="middle" font-size="10" fill="#3949ab">Rust dependencies</text>
+
+  <rect x="35" y="195" width="170" height="42" fill="#e8eaf6" stroke="#7986cb" stroke-width="1" rx="5"/>
+  <text x="120" y="212" text-anchor="middle" font-size="11" font-weight="bold" fill="#3949ab">pip / uv</text>
+  <text x="120" y="228" text-anchor="middle" font-size="10" fill="#3949ab">Python packages</text>
+
+  <rect x="35" y="250" width="170" height="42" fill="#e8eaf6" stroke="#7986cb" stroke-width="1" rx="5"/>
+  <text x="120" y="267" text-anchor="middle" font-size="11" font-weight="bold" fill="#3949ab">http_archive</text>
+  <text x="120" y="283" text-anchor="middle" font-size="10" fill="#3949ab">toolchain tarballs</text>
+
+  <!-- score-cache box -->
+  <rect x="330" y="50" width="240" height="400" fill="#e8f5e9" stroke="#43a047" stroke-width="1.5" rx="8"/>
+  <text x="450" y="72" text-anchor="middle" font-size="12" font-weight="bold" fill="#2e7d32">score-cache  ·  OCI image</text>
+
+  <!-- Services inside score-cache -->
+  <rect x="345" y="85" width="210" height="55" fill="#c8e6c9" stroke="#43a047" stroke-width="1" rx="5"/>
+  <text x="450" y="104" text-anchor="middle" font-size="11" font-weight="bold" fill="#1b5e20">bazel-remote</text>
+  <text x="450" y="119" text-anchor="middle" font-size="10" fill="#1b5e20">:9092 · Bazel HTTP cache API</text>
+  <text x="450" y="133" text-anchor="middle" font-size="10" fill="#1b5e20">action cache + CAS blobs</text>
+
+  <rect x="345" y="152" width="210" height="55" fill="#c8e6c9" stroke="#43a047" stroke-width="1" rx="5"/>
+  <text x="450" y="171" text-anchor="middle" font-size="11" font-weight="bold" fill="#1b5e20">devpi</text>
+  <text x="450" y="186" text-anchor="middle" font-size="10" fill="#1b5e20">:3141 · PyPI simple index</text>
+  <text x="450" y="200" text-anchor="middle" font-size="10" fill="#1b5e20">Python wheels + sdists</text>
+
+  <rect x="345" y="219" width="210" height="55" fill="#c8e6c9" stroke="#43a047" stroke-width="1" rx="5"/>
+  <text x="450" y="238" text-anchor="middle" font-size="11" font-weight="bold" fill="#1b5e20">cargo-mirror  (nginx)</text>
+  <text x="450" y="253" text-anchor="middle" font-size="10" fill="#1b5e20">:8081/cargo · sparse registry</text>
+  <text x="450" y="267" text-anchor="middle" font-size="10" fill="#1b5e20">crate tarballs + index</text>
+
+  <rect x="345" y="286" width="210" height="55" fill="#c8e6c9" stroke="#43a047" stroke-width="1" rx="5"/>
+  <text x="450" y="305" text-anchor="middle" font-size="11" font-weight="bold" fill="#1b5e20">artifact mirror  (nginx)</text>
+  <text x="450" y="320" text-anchor="middle" font-size="10" fill="#1b5e20">:8081/artifacts · HTTP GET</text>
+  <text x="450" y="334" text-anchor="middle" font-size="10" fill="#1b5e20">toolchain archives</text>
+
+  <!-- Artifactory box -->
+  <rect x="680" y="50" width="200" height="400" fill="#e3f2fd" stroke="#1e88e5" stroke-width="1.5" rx="8"/>
+  <text x="780" y="72" text-anchor="middle" font-size="12" font-weight="bold" fill="#1565c0">Artifactory</text>
+  <text x="780" y="87" text-anchor="middle" font-size="10" fill="#1565c0">(commercial equivalent)</text>
+
+  <rect x="695" y="99" width="170" height="42" fill="#bbdefb" stroke="#1e88e5" stroke-width="1" rx="5"/>
+  <text x="780" y="116" text-anchor="middle" font-size="11" font-weight="bold" fill="#0d47a1">Bazel Remote Cache</text>
+  <text x="780" y="132" text-anchor="middle" font-size="10" fill="#0d47a1">repository</text>
+
+  <rect x="695" y="154" width="170" height="42" fill="#bbdefb" stroke="#1e88e5" stroke-width="1" rx="5"/>
+  <text x="780" y="171" text-anchor="middle" font-size="11" font-weight="bold" fill="#0d47a1">PyPI Proxy</text>
+  <text x="780" y="187" text-anchor="middle" font-size="10" fill="#0d47a1">repository</text>
+
+  <rect x="695" y="209" width="170" height="42" fill="#bbdefb" stroke="#1e88e5" stroke-width="1" rx="5"/>
+  <text x="780" y="226" text-anchor="middle" font-size="11" font-weight="bold" fill="#0d47a1">Cargo</text>
+  <text x="780" y="242" text-anchor="middle" font-size="10" fill="#0d47a1">repository</text>
+
+  <rect x="695" y="264" width="170" height="42" fill="#bbdefb" stroke="#1e88e5" stroke-width="1" rx="5"/>
+  <text x="780" y="281" text-anchor="middle" font-size="11" font-weight="bold" fill="#0d47a1">Generic / Maven</text>
+  <text x="780" y="297" text-anchor="middle" font-size="10" fill="#0d47a1">repository</text>
+
+  <!-- Green arrows: devcontainer → score-cache -->
+  <line x1="205" y1="106" x2="342" y2="112" stroke="#43a047" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <line x1="205" y1="161" x2="342" y2="178" stroke="#43a047" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <line x1="205" y1="216" x2="342" y2="246" stroke="#43a047" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <line x1="205" y1="271" x2="342" y2="313" stroke="#43a047" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+  <!-- Blue dashed arrows: devcontainer → Artifactory -->
+  <line x1="205" y1="106" x2="678" y2="120" stroke="#1e88e5" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#arrow-blue)"/>
+  <line x1="205" y1="161" x2="678" y2="175" stroke="#1e88e5" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#arrow-blue)"/>
+  <line x1="205" y1="216" x2="678" y2="230" stroke="#1e88e5" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#arrow-blue)"/>
+  <line x1="205" y1="271" x2="678" y2="285" stroke="#1e88e5" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#arrow-blue)"/>
+
+  <!-- Legend -->
+  <rect x="20" y="465" width="860" height="45" fill="#fff" stroke="#ddd" rx="5"/>
+  <line x1="40" y1="488" x2="80" y2="488" stroke="#43a047" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <text x="88" y="492" font-size="11" fill="#2e7d32">score-cache routing (self-hosted, open-source)</text>
+  <line x1="340" y1="488" x2="380" y2="488" stroke="#1e88e5" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#arrow-blue)"/>
+  <text x="388" y="492" font-size="11" fill="#1565c0">Artifactory routing (commercial alternative)</text>
+  <text x="650" y="492" font-size="11" fill="#555">Backends are interchangeable — no client changes needed</text>
+</svg>

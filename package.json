@@ -1,0 +1,12 @@
+{
+  "name": "score-cache-slides",
+  "version": "1.0.0",
+  "description": "Marp slide deck — score-cache explainer",
+  "scripts": {
+    "build": "marp slides.md --html --output dist/index.html",
+    "preview": "marp slides.md --server"
+  },
+  "devDependencies": {
+    "@marp-team/marp-cli": "4.2.3"
+  }
+}
